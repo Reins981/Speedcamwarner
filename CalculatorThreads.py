@@ -8,7 +8,12 @@ Created on 01.07.2014
 '''
 
 from __future__ import division
+
+import ssl
 import time, calendar
+
+import certifi
+
 from Logger import Logger
 import math
 import copy
