@@ -52,7 +52,8 @@ if platform == "android":
     from LocationManager import LocationManager, \
         LocationReceiverBackground, GPSAndroidBackground, context, IntentFilter
 
-    request_permissions([Permission.CAMERA,
+    request_permissions([Permission.INTERNET,
+                         Permission.CAMERA,
                          Permission.RECORD_AUDIO,
                          Permission.ACCESS_COARSE_LOCATION,
                          Permission.ACCESS_FINE_LOCATION,
@@ -130,7 +131,7 @@ class CurveLayout(RelativeLayout):
             Color(.80, .80, .80, .80)
             self.axis_x = Line(points=[40, 0, 970, 0], width=3, joint='round')
             self.sd_y = Label(text='Speed', bold=True, color=(1, 1, 1, 1), font_size=50,
-                              pos_hint={"top": 1}, size_hint=(0.15, .2))
+                              pos_hint={"top": 1}, size_hint=(0.15, .3))
             self.add_widget(self.sd_y)
             self.eco = Label(text='', bold=True, color=(0, 1, .3, .8), font_size=50,
                              pos_hint={"top": 1}, size_hint=(1.65, 1.50))
@@ -471,7 +472,8 @@ class MaxSpeedlayout(FloatLayout):
     def has_current_cam_road(self):
         return self.camroad.text != "" and "->" not in self.camroad.text
 
-    def update_cam_road(self, road="", reset=False, m_type="CAMERA", color=None):
+    def update_cam_road(self, road="", reset=False, m_type="CAMERA",
+                        color=None, size_hint=None, size=None):
         if reset:
             if self.camroad.text != "":
                 self.camroad.text = ""
@@ -491,7 +493,8 @@ class MaxSpeedlayout(FloatLayout):
             if self.camroad.text != str(road):
                 self.camroad.text = str(road)
                 self.camroad.color = color
-                self.camroad.size_hint = (1., 0.2)
+                self.camroad.size_hint = size_hint if size_hint else (1., 0.2)
+                self.camroad.font_size = size if size else "26sp"
                 Clock.schedule_once(self.camroad.texture_update)
                 if m_type == "HAZARD":
                     Clock.schedule_once(self.callback_hazard)
@@ -780,13 +783,12 @@ class Cameralayout(BoxLayout):
                 return
 
             road_name = calculator.get_road_name_via_nominatim(lat, lon)
-            if "ERROR:" in road_name:
-                self.voice_prompt_queue.produce_info(self.cv_voice, "ADDING_POLICE_FAILED")
+            if road_name and "ERROR:" not in road_name:
+                calculator.start_thread_pool_upload_speed_camera_to_drive(
+                    calculator.upload_camera_to_drive, 1, road_name, lat, lon)
                 return
-            road_name = "" if road_name is None else road_name
 
-            calculator.start_thread_pool_upload_speed_camera_to_drive(
-                calculator.upload_camera_to_drive, 1, road_name, lat, lon)
+            self.voice_prompt_queue.produce_info(self.cv_voice, "ADDING_POLICE_FAILED")
 
 
 class Gpslayout(BoxLayout):
@@ -1802,30 +1804,39 @@ class MyMapView(MapView):
     re_center = False
 
     def __init__(self, **kwargs):
-        self.cache_path = App.get_running_app().user_data_dir
-        zoom = kwargs['zoom']
-        lat = kwargs['lat']
-        lon = kwargs['lon']
-        super().__init__(zoom=zoom, lat=lat, lon=lon, map_source="osm", cache_dir=self.cache_path)
+        try:
+            self.cache_path = App.get_running_app().user_data_dir
+            zoom = kwargs['zoom']
+            lat = kwargs['lat']
+            lon = kwargs['lon']
+            super().__init__(zoom=zoom, lat=lat, lon=lon, map_source="osm", cache_dir=self.cache_path)
+        except Exception as e:
+            print(f"Error during initialization: {str(e)}")
 
     def add_custom_marker(self, coord_0, coord_1, source, text):
-        marker = MapMarker(lon=float(coord_1), lat=float(coord_0), source=source)
-        marker.on_release = lambda marker: self.show_popup(marker, text)  # Assign on_release event
-        self.add_marker(marker)  # Add MapMarker to MapView
+        try:
+            marker = MapMarker(lon=float(coord_1), lat=float(coord_0), source=source)
+            marker.on_release = lambda marker: self.show_popup(marker, text)  # Assign on_release event
+            self.add_marker(marker)  # Add MapMarker to MapView
 
-        return marker
+            return marker
+        except Exception as e:
+            print(f"Error while adding custom marker: {str(e)}")
 
     @staticmethod
     def show_popup(marker, text):
-        # Create a new Popup instance
-        popup = Popup(title='Details', content=Label(text=text), size_hint=(None, None),
-                      size=(400, 400))
+        try:
+            # Create a new Popup instance
+            popup = Popup(title='Details', content=Label(text=text), size_hint=(None, None),
+                        size=(400, 400))
 
-        # Set the position of the Popup to the location of the MapMarker
-        popup.pos = marker.pos
+            # Set the position of the Popup to the location of the MapMarker
+            popup.pos = marker.pos
 
-        # Open the Popup
-        popup.open()
+            # Open the Popup
+            popup.open()
+        except Exception as e:
+            print(f"Error while showing popup: {str(e)}")
 
 
 class Maplayout(RelativeLayout):
@@ -2031,7 +2042,8 @@ class MainTApp(App):
             else:
                 print("callback. Some permissions refused.")
 
-        request_permissions([Permission.CAMERA, Permission.ACCESS_COARSE_LOCATION,
+        request_permissions([Permission.INTERNET,
+                             Permission.CAMERA, Permission.ACCESS_COARSE_LOCATION,
                              Permission.ACCESS_FINE_LOCATION, Permission.WRITE_EXTERNAL_STORAGE,
                              Permission.READ_EXTERNAL_STORAGE, Permission.WAKE_LOCK,
                              Permission.RECORD_AUDIO], callback)

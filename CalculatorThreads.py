@@ -8,16 +8,21 @@ Created on 01.07.2014
 '''
 
 from __future__ import division
+
+import os
 import time, calendar
 from Logger import Logger
 import math
 import copy
 import json
+import ssl
+import certifi
 import unicodedata
 from random import randint
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 from kivy.clock import Clock
+import geopy.geocoders
 from geopy.geocoders import Nominatim
 from decimal import Decimal
 from collections import OrderedDict, Counter
@@ -29,6 +34,9 @@ from enum import Enum
 from collections import defaultdict
 from ServiceAccount import upload_file_to_google_drive, \
     build_drive_from_credentials, add_camera_to_json, FILE_ID, FOLDER_ID
+
+ctx = ssl.create_default_context(cafile=certifi.where())
+geopy.geocoders.options.default_ssl_context = ctx
 
 
 class FilteredRoadClasses(Enum):
@@ -617,7 +625,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
         #   * Nominatim is the standard road name lookup method if cameras_look_ahead_mode == True
         # Per default the road name is retrieved via the REST API interface to OpenStreetMap
         self.alternative_road_lookup = True
-        self.geolocator = Nominatim(user_agent="mozilla")
+        self.geolocator = Nominatim(user_agent="MasterWarner", scheme='http')
         # Instead of two extrapolated rects, only one can be used (increases performance
         # but might lead to less speed cameras found)
         # If we are on a motorway only one extrapolated rect larger in size will be used
@@ -1564,19 +1572,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             self.cache_tiles(self.xtile, self.ytile)
             return
 
-        if self.gpsstatus == 'CALCULATE':
-            # update the SpeedWarner Thread
-            self.speed_cam_queue.produce(self.cv_speedcam, {
-                'ccp': (self.longitude, self.latitude),
-                'fix_cam': (False, 0, 0),
-                'traffic_cam': (False, 0, 0),
-                'distance_cam': (False, 0, 0),
-                'mobile_cam': (False, 0, 0),
-                'ccp_node': (None, None),
-                'list_tree': (None, None),
-                'stable_ccp': self.isCcpStable,
-                'bearing': self.bearing})
-        elif self.gpsstatus == 'OFFLINE':
+        if self.gpsstatus == 'OFFLINE':
             # update the SpeedWarner Thread
             self.calculate_extrapolated_position(self.longitude_cached,
                                                  self.latitude_cached,
@@ -1600,9 +1596,6 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             self.currentspeed_queue.produce(self.cv_currentspeed, None)
             self.overspeed_queue.clear_overspeedqueue(self.cv_overspeed)
 
-        else:
-            pass
-
         # offline.
         if self.gpsstatus == 'OFFLINE':
             return 'OFFLINE'
@@ -1620,8 +1613,8 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             return 'INIT'
 
     def process_offline(self):
-        if self.last_max_speed == ">->->" or self.last_max_speed is None:
-            self.update_kivi_maxspeed("<-<-<", color=(1, 0, 0, 3))
+        if self.last_max_speed == ">>>" or self.last_max_speed is None:
+            self.update_kivi_maxspeed("<<<", color=(1, 0, 0, 3))
         self.update_kivi_roadname("", False)
 
     def process_look_ahead_interrupts(self):
@@ -1641,8 +1634,8 @@ class RectangleCalculatorThread(StoppableThread, Logger):
                                        poi=False,
                                        facility=False)
         if self.cam_in_progress is False and self.internet_available():
-            self.update_kivi_maxspeed(">->->")
-            self.last_max_speed = ">->->"
+            self.update_kivi_maxspeed(">>>")
+            self.last_max_speed = ">>>"
         else:
             self.last_max_speed = "KEEP"
         RectangleCalculatorThread.thread_lock = False
@@ -1872,6 +1865,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
         :return:
         """
         counter = 80000
+        ccp_outdated = False
         for element in data:
             speed_cam_dict = dict()
             name = None
@@ -1879,6 +1873,9 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             maxspeed = None
             maxspeed_conditional = None
             description = None
+
+            ccp_lon = 'IGNORE' if ccp_outdated else ccp_lon
+            ccp_lat = 'IGNORE' if ccp_outdated else ccp_lat
             try:
                 lat = element['lat']
                 lon = element['lon']
@@ -1977,6 +1974,10 @@ class RectangleCalculatorThread(StoppableThread, Logger):
                 self.update_speed_cams(speed_l)
                 self.update_map_queue()
                 self.cleanup_map_content()
+
+            # After one camera is propagated, the original ccp is already outdated
+            if not ccp_outdated:
+                ccp_outdated = True
 
     def speed_cam_lookup_ahead(self, xtile, ytile, ccp_lon, ccp_lat):
         """
@@ -3583,11 +3584,9 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             coords = str(latitude) + " " + str(longitude)
             # try to not fetch buildings, only major and minor streets
             location = self.geolocator.reverse(coords, zoom=17)
-            self.internet_connection = True
         except Exception as e:
             self.print_log_line(f" Road lookup via Nominatim failed! -> "
                                 f"{str(e)}", log_level="ERROR")
-            self.internet_connection = False
             return "ERROR: Road lookup TIMEOUT"
 
         if location:

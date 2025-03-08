@@ -232,10 +232,10 @@ class GPSThread(StoppableThread, Logger):
 
     def set_configs(self):
         # use gps test data
-        self.gps_test_data = False
+        self.gps_test_data = True
         self.max_gps_entries = 50000
         self.gpx_file = os.path.join(os.path.dirname(__file__), "gpx",
-                                     "Ronde_van_Nederland_reverse_aug_2021.gpx")
+                                     "t1374104_berliner-mauerweg.gpx")
         # GPS treshold which is considered as a Weak GPS Signal
         self.gps_treshold = 40
         # Max GPS inaccuracy treshold after which the App will go into OFF mode.
@@ -280,7 +280,7 @@ class GPSThread(StoppableThread, Logger):
         if self.gps_test_data:
             try:
                 event = next(self.gps_data)
-                time.sleep(1.5)
+                time.sleep(1.3)
             except StopIteration:
                 event = None
         else:
@@ -435,7 +435,7 @@ class GPSThread(StoppableThread, Logger):
         else:
             self.print_log_line("GPS status is ON")
             self.voice_prompt_queue.produce_gpssignal(self.cv_voice, 'GPS_ON')
-            self.calculator.update_kivi_maxspeed(">->->")
+            self.calculator.update_kivi_maxspeed(">>>")
             self.g.on_state()
             self.on_state = True
             self.off_state = False

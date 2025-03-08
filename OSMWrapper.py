@@ -193,7 +193,7 @@ class Maps(Logger):
         self.colors = ["#ff7800", "#1100ff", "#00ff11", "#9100ff", "#eeff00", "#00eeff", "#ff00ee",
                        "#584dff", "#4d9bff"]
         # instantiate a new Nominatim client
-        self.app = Nominatim(user_agent="reverse_geocoder")
+        self.app = Nominatim(user_agent="ReverseGeocoder")
 
         self.set_configs()
 

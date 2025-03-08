@@ -123,8 +123,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
             return 'EXIT'
 
         if item['ccp'][0] == 'IGNORE' or item['ccp'][1] == 'IGNORE':
-            self.print_log_line(' Got a camera from the POI Reader ')
+            self.print_log_line(' Ignore CCP update')
         else:
+            self.print_log_line(' Received new CCP update')
             # back the updated ccp in case cameras originating from the POI Reader arrive
             self.longitude = item['ccp'][0]
             self.latitude = item['ccp'][1]
@@ -387,11 +388,14 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
 
         # Delete obsolete cameras
         self.delete_cameras(cams_to_delete)
+
         # Sort cameras based on distance
         cam, cam_entry = self.sort_pois(cam_list)
+
         # Reset the camera dismiss counter
         if cam != self.current_cam_pointer:
             self.dismiss_counter = 0
+
         # Point to the current camera
         self.current_cam_pointer = cam
         # Nothing to sort
@@ -399,10 +403,12 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
             self.print_log_line(" No cameras available. Abort sorting process")
             self.update_cam_road(reset=True)
             return False
-        # Sort the follow up cameras based on the list of cameras - the actual camera
+
+        # Sort the follow-up cameras based on the list of cameras - the actual camera
         cam_list_followup = cam_list.copy()
         cam_list_followup.remove(cam_entry)
         next_cam, next_cam_entry = self.sort_pois(cam_list_followup)
+
         # Set up the road name and the distance for the next camera
         next_cam_road = ""
         next_cam_distance = ""
@@ -411,14 +417,19 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
         if next_cam is not None and next_cam in self.ITEMQUEUE:
             try:
                 next_cam_road = self.ITEMQUEUE[next_cam][7]
+                if len(next_cam_road) > 20:
+                    next_cam_road = next_cam_road[:20] + "."
             except KeyError:
                 pass
-            next_cam_distance = str(next_cam_entry[1]) + "m"
+            next_cam_distance = str(int(round(next_cam_entry[1]))) + " m"
             next_cam_distance_as_int = next_cam_entry[1]
             process_next_cam = True
 
         try:
             cam_attributes = self.ITEMQUEUE[cam]
+            if cam_attributes[7]:
+                if len(cam_attributes[7]) > 20:
+                    cam_attributes[7] = cam_attributes[7][:20] + "."
             cam_road_name = cam_attributes[7] if cam_attributes[7] else ""
             current_distance_to_cam = cam_entry[1]
         except KeyError:
@@ -485,8 +496,8 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
             SpeedCamWarnerThread.CAM_IN_PROGRESS = False
             self.trigger_free_flow()
             if self.dismiss_counter <= self.max_dismiss_counter:
-                self.update_cam_road(road=f"DISMISS -> {cam_road_name}",
-                                     color=(0, 1, .3, .8))
+                self.update_cam_road(road=f"DISMISS\n{cam_road_name}",
+                                     color=(0, 1, .3, .8), size="26sp")
                 self.dismiss_counter += 1
             else:
                 self.update_cam_road(reset=True)
@@ -587,7 +598,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                 if cam_coordinates in self.ITEMQUEUE:
                     try:
                         self.update_cam_road(road=self.ITEMQUEUE[cam_coordinates][7])
-                        self.update_max_speed(max_speed=self.ITEMQUEUE[cam_coordinates][10])
+                        self.update_max_speed(max_speed=max_speed)
                     except KeyError:
                         self.update_cam_road(road="")
                         self.update_max_speed(reset=True)
@@ -664,8 +675,10 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                     SpeedCamWarnerThread.CAM_IN_PROGRESS = False
                     self.trigger_free_flow()
                     self.update_cam_road(reset=True) if not process_next_cam \
-                        else self.update_cam_road(road=f"{next_cam_road} -> {next_cam_distance}",
-                                                  color=(1, .9, 0, 2)) if \
+                        else self.update_cam_road(road=f"{next_cam_distance}\n{next_cam_road}",
+                                                  color=(1, .9, 0, 2),
+                                                  size_hint=(1., 0.4),
+                                                  size="26sp") if \
                         next_cam_distance_as_int <= self.max_distance_to_future_camera else \
                         self.update_cam_road(reset=True)
                     self.update_max_speed(reset=True)
@@ -724,8 +737,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                     SpeedCamWarnerThread.CAM_IN_PROGRESS = False
                     self.trigger_free_flow()
                     self.update_cam_road(reset=True) if not process_next_cam \
-                        else self.update_cam_road(road=f"{next_cam_road} -> {next_cam_distance}",
-                                                  color=(1, .9, 0, 2)) if \
+                        else self.update_cam_road(road=f"{next_cam_distance}\n{next_cam_road}",
+                                                  color=(1, .9, 0, 2), size_hint=(1., 0.4),
+                                                  size="26sp") if \
                         next_cam_distance_as_int <= self.max_distance_to_future_camera else \
                         self.update_cam_road(reset=True)
                     self.update_max_speed(reset=True)
@@ -784,8 +798,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                     SpeedCamWarnerThread.CAM_IN_PROGRESS = False
                     self.trigger_free_flow()
                     self.update_cam_road(reset=True) if not process_next_cam \
-                        else self.update_cam_road(road=f"{next_cam_road} -> {next_cam_distance}",
-                                                  color=(1, .9, 0, 2)) if \
+                        else self.update_cam_road(road=f"{next_cam_distance}\n{next_cam_road}",
+                                                  color=(1, .9, 0, 2), size_hint=(1., 0.4),
+                                                  size="26sp") if \
                         next_cam_distance_as_int <= self.max_distance_to_future_camera else \
                         self.update_cam_road(reset=True)
                     self.update_max_speed(reset=True)
@@ -817,8 +832,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                     SpeedCamWarnerThread.CAM_IN_PROGRESS = False
                     self.trigger_free_flow()
                     self.update_cam_road(reset=True) if not process_next_cam \
-                        else self.update_cam_road(road=f"{next_cam_road} -> {next_cam_distance}",
-                                                  color=(1, .9, 0, 2)) if \
+                        else self.update_cam_road(road=f"{next_cam_distance}\n{next_cam_road}",
+                                                  color=(1, .9, 0, 2), size_hint=(1., 0.4),
+                                                  size="26sp") if \
                         next_cam_distance_as_int <= self.max_distance_to_future_camera else \
                         self.update_cam_road(reset=True)
                     self.update_max_speed(reset=True)
@@ -828,10 +844,12 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
         else:
             if last_distance == -1 and distance < self.max_absolute_distance:
                 self.update_cam_road(reset=True) if not process_next_cam \
-                    else self.update_cam_road(road=f"{next_cam_road} -> {next_cam_distance}",
-                                              color=(1, .9, 0, 2)) if \
+                    else self.update_cam_road(road=f"{next_cam_distance}\n{next_cam_road}",
+                                              color=(1, .9, 0, 2), size_hint=(1., 0.4),
+                                              size="26sp") if \
                     next_cam_distance_as_int <= self.max_distance_to_future_camera else \
                     self.update_cam_road(reset=True)
+                self.update_max_speed(reset=True)
                 SpeedCamWarnerThread.CAM_IN_PROGRESS = False
                 return
             self.print_log_line(" %s speed cam OUTSIDE relevant radius -> distance %d m" % (
@@ -840,8 +858,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
             SpeedCamWarnerThread.CAM_IN_PROGRESS = False
             self.trigger_free_flow()
             self.update_cam_road(reset=True) if not process_next_cam \
-                else self.update_cam_road(road=f"{next_cam_road} -> {next_cam_distance}",
-                                          color=(1, .9, 0, 2)) if \
+                else self.update_cam_road(road=f"{next_cam_distance}\n{next_cam_road}",
+                                          color=(1, .9, 0, 2), size_hint=(1., 0.4),
+                                          size="26sp") if \
                 next_cam_distance_as_int <= self.max_distance_to_future_camera else \
                 self.update_cam_road(reset=True)
             self.update_max_speed(reset=True)
@@ -926,16 +945,16 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
     def has_current_cam_road(self):
         return self.ms.has_current_cam_road()
 
-    def update_cam_road(self, road=None, reset=False, color=None):
+    def update_cam_road(self, road=None, reset=False, color=None, size_hint=None, size=None):
         if self.resume.isResumed():
-            self.ms.update_cam_road(road, reset, color=color)
+            self.ms.update_cam_road(road, reset, color=color, size_hint=size_hint, size=size)
 
     def update_max_speed(self, max_speed=None, reset=False):
         if self.resume.isResumed():
             if reset:
-                if self.ms.maxspeed.text != ">->->" and self.calculator.internet_available():
+                if self.ms.maxspeed.text != ">>>" and self.calculator.internet_available():
                     font_size = 230
-                    self.ms.maxspeed.text = ">->->"
+                    self.ms.maxspeed.text = ">>>"
                     self.ms.maxspeed.color = (0, 1, .3, .8)
                     self.ms.maxspeed.font_size = font_size
                     Clock.schedule_once(self.ms.maxspeed.texture_update)
@@ -948,9 +967,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                         self.ms.maxspeed.font_size = font_size
                         Clock.schedule_once(self.ms.maxspeed.texture_update)
                 else:
-                    if self.ms.maxspeed.text != ">->->":
+                    if self.ms.maxspeed.text != ">>>":
                         font_size = 230
-                        self.ms.maxspeed.text = ">->->"
+                        self.ms.maxspeed.text = ">>>"
                         self.ms.maxspeed.color = (0, 1, .3, .8)
                         self.ms.maxspeed.font_size = font_size
                         Clock.schedule_once(self.ms.maxspeed.texture_update)
