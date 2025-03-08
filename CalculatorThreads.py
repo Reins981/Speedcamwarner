@@ -8,15 +8,11 @@ Created on 01.07.2014
 '''
 
 from __future__ import division
-
-import os
 import time, calendar
 from Logger import Logger
 import math
 import copy
 import json
-import ssl
-import certifi
 import unicodedata
 from random import randint
 from urllib.request import urlopen
