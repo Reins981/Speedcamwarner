@@ -351,10 +351,16 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                     # delete backup camera and startup time
                     self.ITEMQUEUE_BACKUP.pop(cam)
 
-        for cam, cam_attributes in self.ITEMQUEUE.copy().items():
+        for cam, cam_attributes in self.ITEMQUEUE.items():
             distance = self.check_distance_between_two_points(cam,
                                                               (self.longitude,
                                                                self.latitude))
+            self.ITEMQUEUE[cam] = [*cam_attributes, distance]
+
+        # sort the cams based on real time calculated stored distance
+        self.ITEMQUEUE = dict(sorted(self.ITEMQUEUE.items(), key=lambda item: item[1][-1]))
+        for cam, cam_attributes in self.ITEMQUEUE.copy().items():
+            distance = cam_attributes[-1]
             self.print_log_line(" Initial Distance to speed cam (%f, %f, %s): "
                                 "%f meters , last distance: %s, storage_time: %f seconds"
                                 % (cam[0], cam[1], cam_attributes[0],
