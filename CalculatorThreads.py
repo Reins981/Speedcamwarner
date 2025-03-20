@@ -13,6 +13,7 @@ import ssl
 import time, calendar
 
 import certifi
+import requests
 
 from Logger import Logger
 import math
@@ -626,7 +627,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
         #   * Nominatim is the standard road name lookup method if cameras_look_ahead_mode == True
         # Per default the road name is retrieved via the REST API interface to OpenStreetMap
         self.alternative_road_lookup = True
-        self.geolocator = Nominatim(user_agent="MasterWarner", scheme='http')
+        # self.geolocator = Nominatim(user_agent="MasterWarner", scheme='http')
         # Instead of two extrapolated rects, only one can be used (increases performance
         # but might lead to less speed cameras found)
         # If we are on a motorway only one extrapolated rect larger in size will be used
@@ -3581,17 +3582,26 @@ class RectangleCalculatorThread(StoppableThread, Logger):
                                 log_level="ERROR")
             return None
 
+        url = f'https://nominatim.openstreetmap.org/reverse?lat={str(latitude)}&lon={str(longitude)}&format=json&accept-language=en&zoom=17'
         try:
-            coords = str(latitude) + " " + str(longitude)
             # try to not fetch buildings, only major and minor streets
-            location = self.geolocator.reverse(coords, zoom=17)
+            headers = {"User-Agent": "MyApp/1.0 (osmwarner@email.com)"}
+            location = requests.get(url=url, headers=headers)
+            if location.status_code == 200:
+                location = location.json()
+            else:
+                self.print_log_line(f" Road lookup failed! -> "
+                                    f"Status Code: {location.status_code}",
+                                    log_level="ERROR")
+                return f"ERROR: ROAD LOOKUP STATUS {location.status_code}"
         except Exception as e:
-            self.print_log_line(f" Road lookup via Nominatim failed! -> "
+            self.print_log_line(url, log_level="ERROR")
+            self.print_log_line(f" Road lookup failed! -> "
                                 f"{str(e)}", log_level="ERROR")
-            return "ERROR: Road lookup TIMEOUT"
+            return "ERROR: ROAD LOOKUP FAILED"
 
         if location:
-            loc = location.address.split(",")
+            loc = location['address']['road'].split(",")
             if loc:
                 # If the first entry is a house number, return the second
                 if loc[0].isnumeric() or loc[0][0].isdigit():

@@ -35,6 +35,8 @@ RUN apt-get update && apt-get install -y \
     libbz2-dev \
     libffi-dev \
     cmake \
+    zip \ 
+    unzip \ 
     openjdk-17-jdk
 
 
