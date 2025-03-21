@@ -31,7 +31,7 @@ class GpsTestDataGenerator(Logger):
                     event = {'data': {'gps': {'accuracy': randint(2, 25),
                                               'latitude': point.latitude,
                                               'longitude': point.longitude,
-                                              'speed': randint(10, 35),
+                                              'speed': randint(10, 35) if point.speed is None else point.speed,
                                               'bearing': randint(200, 250)
                                               }
                                       },

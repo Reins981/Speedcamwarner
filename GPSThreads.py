@@ -7,9 +7,11 @@ Created on 01.07.2014
 
 @author: rkoraschnigg
 '''
-
+import datetime
 import time
 import os
+
+import gpxpy
 from kivy.clock import Clock
 from ThreadBase import StoppableThread
 from GpsData import GpsTestDataGenerator
@@ -222,6 +224,7 @@ class GPSThread(StoppableThread, Logger):
         self.curr_driving_direction = None
         self.last_speed = 0
         self.trigger_speed_correction = False
+        self.route_data = []
 
         # set config items
         self.set_configs()
@@ -241,6 +244,74 @@ class GPSThread(StoppableThread, Logger):
         # Max GPS inaccuracy treshold after which the App will go into OFF mode.
         # Note: This only applies for Weak GPS signals, not if GPS is disabled
         self.gps_inaccuracy_treshold = 4
+        # Flag to indicate if route recording is active
+        self.recording = False
+
+    def start_recording(self):
+        self.recording = True
+        self.route_data = []
+        self.print_log_line("Route recording started")
+
+    def stop_recording(self):
+        self.recording = False
+        self.save_route_data()
+        self.print_log_line("Route recording stopped")
+
+    def load_route_data(self):
+        self.gps_test_data = True
+        self.recording = False
+        self.gpx_file = os.path.join(os.path.dirname(__file__), "gpx", "route_data.gpx")
+        if not os.path.exists(self.gpx_file):
+            self.print_log_line("Route data file <route_data.gpx> not found!!!")
+            self.gps_test_data = False
+            return
+
+        self.gps_data = iter(GpsTestDataGenerator(self.max_gps_entries, self.gpx_file))
+
+    def save_route_data(self):
+        """
+        Save route data in gpx format
+        :return:
+        """
+        if not self.route_data:
+            self.print_log_line("No route data to save", log_level="WARNING")
+            return
+
+        self.print_log_line("Saving route data to GPX file", log_level="WARNING")
+        gpx = gpxpy.gpx.GPX()
+        gpx_track = gpxpy.gpx.GPXTrack()
+        gpx.tracks.append(gpx_track)
+        gpx_segment = gpxpy.gpx.GPXTrackSegment()
+        gpx_track.segments.append(gpx_segment)
+
+        for point in self.route_data:
+            try:
+                latitude = point['latitude']
+                longitude = point['longitude']
+                timestamp = point['timestamp']
+                speed = point['speed']
+                timestamp = datetime.datetime.fromtimestamp(timestamp)
+
+                # Validate latitude, longitude, and timestamp
+                if not (-90 <= latitude <= 90):
+                    raise ValueError(f"Invalid latitude value: {latitude}")
+                if not (-180 <= longitude <= 180):
+                    raise ValueError(f"Invalid longitude value: {longitude}")
+                if not isinstance(timestamp, datetime.datetime):
+                    raise ValueError(f"Invalid timestamp value: {timestamp}")
+
+                gpx_segment.points.append(
+                    gpxpy.gpx.GPXTrackPoint(latitude, longitude, time=timestamp, speed=speed))
+
+            except KeyError as e:
+                self.print_log_line(f"Missing key in route data: {e}", log_level="ERROR")
+            except ValueError as e:
+                self.print_log_line(f"Data validation error: {e}", log_level="ERROR")
+
+        destination_path = os.path.join(os.path.dirname(__file__), "gpx", "route_data.gpx")
+        with open(destination_path, 'w') as f:
+            f.write(gpx.to_xml())
+        self.print_log_line("Route data saved to GPX file", log_level="WARNING")
 
     def run(self):
 
@@ -317,6 +388,15 @@ class GPSThread(StoppableThread, Logger):
                         lat = float(event['data']['gps']['latitude'])
                         lon = float(event['data']['gps']['longitude'])
                         success_coords = True
+                        if self.recording:
+                            self.print_log_line(f"Recording route data: {lat}, {lon}", log_level="WARNING")
+                            self.route_data.append(
+                                {'latitude': lat,
+                                 'longitude': lon,
+                                 'speed': speed,
+                                 "timestamp": time.time()
+                                 }
+                            )
                     if speed is None or success_coords is False:
                         self.print_log_line("Could not retrieve speed or coordinates from event!. "
                                             "Skipping..", log_level="WARNING")

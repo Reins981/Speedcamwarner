@@ -733,12 +733,21 @@ class Cameralayout(BoxLayout):
         self.cv_voice = args[4]
         self.log_viewer = args[5]
 
-        self.policebutton = Button(text='POLICE', font_size=200, bold=True,
+        self.policebutton = Button(text='POLICE', font_size=150, bold=True,
                                    background_color=(.35, .35, .35, .35))
         self.add_widget(self.policebutton)
-        self.c_button = Button(text='ARF', font_size=200, bold=True,
-                                   background_color=(.35, .35, .35, .35))
+        self.c_button = Button(text='ARF', font_size=120, bold=True,
+                               background_color=(.35, .35, .35, .35))
         self.add_widget(self.c_button)
+        self.start_recording_button = Button(text='START REC.', font_size=120, bold=True,
+                                             background_color=(.35, .35, .35, .35))
+        self.add_widget(self.start_recording_button)
+        self.stop_recording_button = Button(text='STOP REC.', font_size=120, bold=True,
+                                            background_color=(.35, .35, .35, .35))
+        self.add_widget(self.stop_recording_button)
+        self.load_route_button = Button(text='LOAD ROUTE', font_size=120, bold=True,
+                                        background_color=(.35, .35, .35, .35))
+        self.add_widget(self.load_route_button)
         self.returnbutton_main = Button(text='<<<', font_size=500, bold=True,
                                         background_color=(.5, .5, .5, .5))
         self.add_widget(self.returnbutton_main)
@@ -746,6 +755,9 @@ class Cameralayout(BoxLayout):
         self.returnbutton_main.bind(on_press=self.callback_return)
         self.policebutton.bind(on_press=self.callback_police)
         self.c_button.bind(on_press=self.callback_camera)
+        self.start_recording_button.bind(on_press=self.callback_start_recording)
+        self.stop_recording_button.bind(on_press=self.callback_stop_recording)
+        self.load_route_button.bind(on_press=self.callback_load_route)
 
     def callback_return(self, instance):
         self.sm.current = 'Operative'
@@ -754,6 +766,23 @@ class Cameralayout(BoxLayout):
         self.main_app.stop_deviation_checker_thread()
         Clock.schedule_once(self.connect_camera)
         self.sm.current = 'Camera'
+
+    def callback_start_recording(self, instance):
+        self.main_app.start_recording()
+
+    def callback_load_route(self, instance):
+        self.main_app.load_route()
+        popup = Popup(title='Loading Route Data',
+                      content=Label(text='Success!'),
+                      size_hint=(None, None), size=(600, 600))
+        popup.open()
+
+    def callback_stop_recording(self, instance):
+        self.main_app.stop_recording()
+        popup = Popup(title='Saving Route Data',
+                      content=Label(text='Success!'),
+                      size_hint=(None, None), size=(600, 600))
+        popup.open()
 
     def connect_camera(self, dt):
         if not self.ar_layout.edge_detect.camera_connected:
@@ -1809,14 +1838,16 @@ class MyMapView(MapView):
             zoom = kwargs['zoom']
             lat = kwargs['lat']
             lon = kwargs['lon']
-            super().__init__(zoom=zoom, lat=lat, lon=lon, map_source="osm", cache_dir=self.cache_path)
+            super().__init__(zoom=zoom, lat=lat, lon=lon, map_source="osm",
+                             cache_dir=self.cache_path)
         except Exception as e:
             print(f"Error during initialization: {str(e)}")
 
     def add_custom_marker(self, coord_0, coord_1, source, text):
         try:
             marker = MapMarker(lon=float(coord_1), lat=float(coord_0), source=source)
-            marker.on_release = lambda marker: self.show_popup(marker, text)  # Assign on_release event
+            marker.on_release = lambda marker: self.show_popup(marker,
+                                                               text)  # Assign on_release event
             self.add_marker(marker)  # Add MapMarker to MapView
 
             return marker
@@ -1828,7 +1859,7 @@ class MyMapView(MapView):
         try:
             # Create a new Popup instance
             popup = Popup(title='Details', content=Label(text=text), size_hint=(None, None),
-                        size=(400, 400))
+                          size=(400, 400))
 
             # Set the position of the Popup to the location of the MapMarker
             popup.pos = marker.pos
@@ -2727,6 +2758,15 @@ class MainTApp(App):
                                     None)
 
         Clock.schedule_once(lambda dt: self.s.update_ar("---.-"), 0)
+
+    def start_recording(self):
+        self.gps_producer.start_recording()
+
+    def stop_recording(self):
+        self.gps_producer.stop_recording()
+
+    def load_route(self):
+        self.gps_producer.load_route_data()
 
     def stop_deviation_checker_thread(self):
         self.q_ar.set_terminate_state(True)
