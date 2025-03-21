@@ -234,8 +234,8 @@ class GPSThread(StoppableThread, Logger):
             pass
 
     def set_configs(self):
-        # use gps test data
-        self.gps_test_data = True
+        # use gps test data from a gpx file if enabled
+        self.gps_test_data = False
         self.max_gps_entries = 50000
         self.gpx_file = os.path.join(os.path.dirname(__file__), "gpx",
                                      "Ronde_van_Nederland_reverse_aug_2021.gpx")
