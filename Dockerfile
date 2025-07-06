@@ -1,20 +1,18 @@
-FROM ubuntu:22.04
+FROM python:3.12.11-slim
 
 WORKDIR /app
 
+# (Optional) Copy your project files
 # COPY . .
 
-# Install dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     libatlas-base-dev \
     autoconf \
     automake \
     libtool \
-    python3-pip \
     build-essential \
     git \
-    python3 \
-    python3-dev \
     ffmpeg \
     libsdl2-dev \
     libsdl2-image-dev \
@@ -24,24 +22,26 @@ RUN apt-get update && apt-get install -y \
     libswscale-dev \
     libavformat-dev \
     libavcodec-dev \
-    zlib1g-dev
-
-RUN pip3 install --upgrade buildozer
-RUN pip3 install cython==0.29.36
-
-RUN apt-get install -y \
-    libgstreamer1.0 \
+    zlib1g-dev \
+    libgstreamer1.0-0 \
     gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good \
-    build-essential \ 
-    libsqlite3-dev \ 
+    libsqlite3-dev \
     sqlite3 \
     bzip2 \
     libbz2-dev \
     libffi-dev \
-    openjdk-11-jdk \
+    openjdk-17-jdk \
     unzip \
-    cmake
+    cmake && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
+# Install Python packages
+RUN pip install --upgrade pip
+RUN pip install --upgrade buildozer
+RUN pip install cython==0.29.36
+
+# Entrypoint for Buildozer
 ENTRYPOINT ["buildozer"]
 CMD ["android", "clean"]
