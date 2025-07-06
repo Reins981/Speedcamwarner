@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-DOCKER_IMAGE="reko8680/android:devkit1"
+DOCKER_IMAGE="reko8680/android:devkit3"
 
 function setup_docker_run_options()
 {
