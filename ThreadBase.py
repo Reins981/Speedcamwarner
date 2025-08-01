@@ -783,7 +783,8 @@ class Worker(StoppableThread, Logger):
                  task_counter=None,
                  result_map=None,
                  action='NETWORK',
-                 log_viewer=None):
+                 log_viewer=None,
+                 raise_exception=False):
         StoppableThread.__init__(self)
         Logger.__init__(self, self.__class__.__name__, log_viewer)
         self.tasks = tasks
@@ -791,6 +792,7 @@ class Worker(StoppableThread, Logger):
         self.TaskCounter = task_counter
         self.ResultMap = result_map
         self.action = action
+        self.raise_exception = raise_exception
 
         # global variables
         self.online_available = False
@@ -805,7 +807,6 @@ class Worker(StoppableThread, Logger):
 
     def run(self):
         while True:
-            raise_exception = False
             error_msg = None
             # self.print_log_line(' %s starting..' %(currentThread()))
             func, args, kwargs = self.tasks.get()
@@ -826,6 +827,8 @@ class Worker(StoppableThread, Logger):
                         self.status = func(**kwargs)
                     elif self.action == 'LOOKUP':
                         _ = func(**kwargs)
+                    elif self.action == 'DISABLE':
+                        _ = func()
                     else:
                         pass
                 else:
@@ -847,7 +850,6 @@ class Worker(StoppableThread, Logger):
                     else:
                         pass
             except Exception as e:
-                raise_exception = True
                 error_msg = str(e)
             finally:
                 # self.print_log_line(' %s finished task' %(currentThread()))
@@ -875,8 +877,11 @@ class Worker(StoppableThread, Logger):
                 self.tasks.task_done()
                 self.stop()
                 break
-        if raise_exception:
-            raise RuntimeError(error_msg)
+        if error_msg:
+            if self.raise_exception:
+                raise RuntimeError(error_msg)
+            else:
+                self.print_log_line(f"{error_msg}", log_level='ERROR', color='RED')
 
 
 class ThreadPool(Logger):

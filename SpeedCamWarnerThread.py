@@ -423,7 +423,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
         if next_cam is not None and next_cam in self.ITEMQUEUE:
             try:
                 next_cam_road = self.ITEMQUEUE[next_cam][7]
-                if len(next_cam_road) > 20:
+                if next_cam_road and len(next_cam_road) > 20:
                     next_cam_road = next_cam_road[:20] + "."
             except KeyError:
                 pass
@@ -511,7 +511,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
             self.print_log_line(" Leaving Speed Camera with coordinates: "
                                 "(%s %s), road name: %s because of Angle mismatch"
                                 % (cam[0], cam[1], cam_road_name), log_level="WARNING")
-            # self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'ANGLE_MISMATCH')
+            self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'ANGLE_MISMATCH')
             return False
 
         return True
@@ -958,9 +958,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
     def update_max_speed(self, max_speed=None, reset=False):
         if self.resume.isResumed():
             if reset:
-                if self.ms.maxspeed.text != ">>>" and self.calculator.internet_available():
-                    font_size = 230
-                    self.ms.maxspeed.text = ">>>"
+                if self.ms.maxspeed.text != "" and self.calculator.internet_available():
+                    font_size = 100
+                    self.ms.maxspeed.text = ""
                     self.ms.maxspeed.color = (0, 1, .3, .8)
                     self.ms.maxspeed.font_size = font_size
                     Clock.schedule_once(self.ms.maxspeed.texture_update)
@@ -973,9 +973,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                         self.ms.maxspeed.font_size = font_size
                         Clock.schedule_once(self.ms.maxspeed.texture_update)
                 else:
-                    if self.ms.maxspeed.text != ">>>":
-                        font_size = 230
-                        self.ms.maxspeed.text = ">>>"
+                    if self.ms.maxspeed.text != "":
+                        font_size = 100
+                        self.ms.maxspeed.text = ""
                         self.ms.maxspeed.color = (0, 1, .3, .8)
                         self.ms.maxspeed.font_size = font_size
                         Clock.schedule_once(self.ms.maxspeed.texture_update)

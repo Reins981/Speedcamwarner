@@ -91,11 +91,20 @@
             ]
         },
         {
-            "name": "L35",
+            "name": "Old Coach Road Track",
             "coordinates": [
                 {
-                    "latitude": 47.31825479203368,
-                    "longitude": 11.09444056680278
+                    "latitude": -39.38469886779785,
+                    "longitude": 175.40164232254028
+                }
+            ]
+        },
+        {
+            "name": "Anillo Verde Ciclista",
+            "coordinates": [
+                {
+                    "latitude": 40.3940934,
+                    "longitude": -3.7582001
                 }
             ]
         }

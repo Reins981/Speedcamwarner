@@ -345,10 +345,10 @@ class MaxSpeedlayout(FloatLayout):
                              size_hint=(1., 0.2), color=(1, 0, 0, 3))
         self.camroad = Label(text='', bold=True, font_size=50, pos_hint={"top": 1},
                              size_hint=(1., 0.6), color=(1, 0, 0, 3))
-        self.maxspeed = Label(text='IDLE', bold=True, font_size=180, pos_hint={"top": 1},
+        self.maxspeed = Label(text='IDLE', bold=True, font_size=160, pos_hint={"top": 1},
                               size_hint=(1., 0.9), color=(1, .9, 0, 2))
-        self.roadname = Label(text='', bold=True, font_size=100, pos_hint={"top": 1},
-                              size_hint=(1., 1.7))
+        self.roadname = Label(text='', bold=True, font_size=80, pos_hint={"top": 1},
+                              size_hint=(1., 1.2))
         self.imwarner = Label(text='MAX', bold=True, font_size=50, pos_hint={"top": 1},
                               size_hint=(.12, 1))
         self.gui_update = Label(text='', bold=True, font_size=50, pos_hint={"top": 1},
@@ -1210,7 +1210,7 @@ class Speedlayout(FloatLayout):
     def update_overspeed(self, speed=0):
         if self.overspeed.text != "+" + str(speed):
             self.overspeed.text = "+" + str(speed)
-            self.overspeed.font_size = 120
+            self.overspeed.font_size = 100
             self.overspeed.color = (1, 0, 0, 3)
             Clock.schedule_once(self.overspeed.texture_update)
 
@@ -3238,4 +3238,5 @@ if __name__ == '__main__':
     try:
         MainTApp().run()
     except:
-        pass
+        import traceback
+        traceback.print_exc()

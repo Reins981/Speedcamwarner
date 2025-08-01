@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 logger = Logger("ServiceAccount")
 
 BASE_PATH = os.path.join(os.path.abspath(os.path.dirname(__file__)), "service_account")
-SERVICE_ACCOUNT = os.path.join(BASE_PATH, 'osmwarner-a28ef48350cb.json') # Please set the file of your credentials of service account.
+SERVICE_ACCOUNT = os.path.join(BASE_PATH, 'osmwarner-01bcd4dc2dd3.json') # Please set the file of your credentials of service account.
 FOLDER_ID = '1VlWuYw_lGeZzrVt5P-dvw8ZzZWSXpaQR' # Please set the folder ID that you shared your folder with the service account.
 FILENAME = os.path.join(BASE_PATH, 'cameras.json') # Please set the filename with the path you want to upload.
 
@@ -26,6 +26,19 @@ FILE_ID = '1T-Frq3_M-NaGMenIZpTHjrjGusBgoKgE'
 REQUEST_LIMIT = 1  # Adjust the request limit as per your requirements
 TIME_LIMIT = timedelta(seconds=2)  # Adjust the time limit as per your requirements
 user_requests = {}
+
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = SERVICE_ACCOUNT
+
+
+def load_service_account():
+    """
+    Load the service account json configuration file.
+
+    Returns:
+        The configuration json data as a dictionary.
+    """
+    with open(SERVICE_ACCOUNT) as f:
+        return json.load(f)
 
 
 def build_drive_from_credentials():

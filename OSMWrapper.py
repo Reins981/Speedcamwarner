@@ -41,9 +41,9 @@ POI_MARKER = os.path.join(os.path.abspath(os.path.dirname(__file__)), "images", 
 
 
 class LineMapLayer(MapLayer):
-    colors = [Color(0, 1, 0), Color(0, .4, .3), Color(0, .5, .5), Color(0, 1, 1),
-              Color(0, 1, .1), Color(1, .2, .7), Color(1, 1, .5), Color(0, .1, .1),
-              Color(1, 0, 0)]
+    colors = [Color(0, .4, .3, 1), Color(0, .5, .5, 1), Color(0, 1, 1, 1),
+              Color(0, 1, .1, 1), Color(1, .2, .7, 1), Color(1, 1, .5, 1), Color(0, .1, .1, 1),
+              Color(1, 0, 0, 1), Color(0, 1, 0, 1)]
 
     def __init__(self, *args, **kwargs):
         self.coordinates = args[0]
@@ -60,27 +60,46 @@ class LineMapLayer(MapLayer):
 
     def draw_lines(self, *args, **kwargs):
 
-        first = self.mapview.get_window_xy_from(self.coordinates[0], self.coordinates[1],
+        # Corrected order of coordinates
+        first = self.mapview.get_window_xy_from(self.coordinates[0], self.coordinates[3],
+                                                # x0, y0 (top-left)
                                                 self.mapview.zoom)
         second = self.mapview.get_window_xy_from(self.coordinates[2], self.coordinates[3],
+                                                 # x2, y0 (top-right)
                                                  self.mapview.zoom)
-        third = self.mapview.get_window_xy_from(self.coordinates[0], self.coordinates[2],
+        third = self.mapview.get_window_xy_from(self.coordinates[2], self.coordinates[1],
+                                                # x2, y2 (bottom-right)
                                                 self.mapview.zoom)
-        fourth = self.mapview.get_window_xy_from(self.coordinates[1], self.coordinates[3],
+        fourth = self.mapview.get_window_xy_from(self.coordinates[0], self.coordinates[1],
+                                                 # x0, y2 (bottom-left)
                                                  self.mapview.zoom)
+        fifth = self.mapview.get_window_xy_from(self.coordinates[0], self.coordinates[3],
+                                                # x0, y0 (back to top-left)
+                                                self.mapview.zoom)
 
         scatter = self.mapview._scatter
         x, y, s = scatter.x, scatter.y, scatter.scale
         point_list = [first[0], first[1], second[0], second[1], third[0], third[1], fourth[0],
-                      fourth[1]]
+                      fourth[1], fifth[0], fifth[1]]
 
         with self.canvas:
             self.canvas.clear()
             Scale(1 / s, 1 / s, 1)
             Translate(-x, -y)
-            LineMapLayer.colors[self.color_index]
+            if self.color_index == 0:
+                Color(0, 0, 1, 1)
+            elif self.color_index == 1:
+                Color(1, 1, 0, 1)
+            elif self.color_index == 2:
+                Color(1, 0, 0, 1)
+            elif self.color_index == 3:
+                Color(0, 1, 0, 1)
+            elif self.color_index == 4:
+                Color(1, 0, 1, 1)
+            else:
+                Color(0, 1, 1, 1)
             # LineMapLayer.colors[self.color_index]
-            Line(points=point_list, width=8, joint="bevel")
+            Line(points=point_list, width=4, joint="bevel")
 
 
 class OSMThread(StoppableThread, Logger):
@@ -249,7 +268,9 @@ class Maps(Logger):
         geo_attr = (geoBounds, most_propable_heading, rect_name)
         self.geoBoundsExtrapolated.append(geo_attr)
 
-    def osm_update_geoBounds(self, geoBounds, most_propable_heading, rect_name):
+    def osm_update_geoBounds(self, geoBounds, most_propable_heading, rect_name, clear=False):
+        if clear:
+            self.geoBounds.clear()
         geo_attr = (geoBounds, most_propable_heading, rect_name)
         self.geoBounds.append(geo_attr)
 
@@ -304,7 +325,7 @@ class Maps(Logger):
                 if (isinstance(geoBounds[0][0][0], float) and isinstance(geoBounds[0][0][1],
                                                                          float) and isinstance(
                     geoBounds[0][1][0], float) and isinstance(geoBounds[0][1][1], float)):
-                    # self.print_log_line(' Rectangles available for drawing')
+                    self.print_log_line(' Rectangles available for drawing')
                     '''f_handle.write('\t\t// define rectangle geographical bounds\n')
                     f_handle.write('\t\tvar bounds_%s = [[%f, %f], [%f, %f]];\n' % (
                         geoBounds[2], geoBounds[0][0][0], geoBounds[0][0][1], geoBounds[0][1][0],
@@ -451,9 +472,15 @@ class Maps(Logger):
                 self.markers_pois.append(marker)
                 # Add the marker to the map
                 bubble = CustomBubble()
-                image = CustomAsyncImage(
-                    source=source if source else UNDEFINED_ICON,
-                    mipmap=True)
+                try:
+                    image = CustomAsyncImage(
+                        source=source if source else UNDEFINED_ICON,
+                        mipmap=True)
+                except Exception as e:
+                    self.print_log_line(f"Failed to load image {source}: {e}", log_level="WARNING")
+                    image = CustomAsyncImage(
+                        source=UNDEFINED_ICON,
+                        mipmap=True)
                 label = CustomLabel(text="", markup=True, halign='center')
                 label.update_text(f"[b]{amenity}[/b]",
                                   f"{city}",
@@ -535,9 +562,15 @@ class Maps(Logger):
                     if any(markers):
                         self.print_log_line(f"Ignore adding marker ({marker.lat, marker.lon}), "
                                             f"already added into map")
-                        continue
-                    self.print_log_line(f"Adding Marker for Speedcam {key}: "
-                                        f"({marker.lat, marker.lon})")
+                    try:
+                        image = CustomAsyncImage(
+                            source=source,
+                            mipmap=True)
+                    except Exception as e:
+                        self.print_log_line(f"Failed to load image {source}: {e}", log_level="WARNING")
+                        image = CustomAsyncImage(
+                            source=UNDEFINED_ICON,
+                            mipmap=True)
                     self.markers_cams.append(marker)
                     # Add the marker to the map
                     bubble = CustomBubble()

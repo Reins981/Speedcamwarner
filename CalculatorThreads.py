@@ -1615,8 +1615,10 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             return 'INIT'
 
     def process_offline(self):
-        if self.last_max_speed == ">>>" or self.last_max_speed is None:
+        """
+        if self.last_max_speed == "" or self.last_max_speed is None:
             self.update_kivi_maxspeed("<<<", color=(1, 0, 0, 3))
+        """
         self.update_kivi_roadname("", False)
 
     def process_look_ahead_interrupts(self):
@@ -1636,8 +1638,8 @@ class RectangleCalculatorThread(StoppableThread, Logger):
                                        poi=False,
                                        facility=False)
         if self.cam_in_progress is False and self.internet_available():
-            self.update_kivi_maxspeed(">>>")
-            self.last_max_speed = ">>>"
+            self.update_kivi_maxspeed("")
+            self.last_max_speed = ""
         else:
             self.last_max_speed = "KEEP"
         RectangleCalculatorThread.thread_lock = False
@@ -1915,7 +1917,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             if lookup_type == "distance_cam":
                 prefix = "DISTANCE_"
                 name = self.get_road_name_via_nominatim(lat, lon)
-            if "ERROR" in name:
+            if name is not None and "ERROR" in name:
                 name = "---"
 
             key = prefix + str(counter)
@@ -2001,6 +2003,14 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             xtile_max,
             ytile_max)
 
+        self.osm_wrapper.osm_update_geoBounds([[LAT_MAX, LON_MIN],
+                                               [LAT_MIN, LON_MAX]],
+                                              self.direction,
+                                              'CURRENT',
+                                              clear=True)
+        Maps.TRIGGER_RECT_DRAW = True
+        Clock.schedule_once(lambda dt: self.osm_wrapper.draw_geoBounds())
+
         # convert each of the 2 points to (x,y).
         pt1_xtile, pt1_ytile = self.longlat2tile(LAT_MIN, LON_MIN, self.zoom)
         pt2_xtile, pt2_ytile = self.longlat2tile(LAT_MAX, LON_MAX, self.zoom)
@@ -2076,6 +2086,13 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             ytile_min,
             xtile_max,
             ytile_max)
+
+        self.osm_wrapper.osm_update_geoBounds([[LAT_MAX, LON_MIN],
+                                               [LAT_MIN, LON_MAX]],
+                                              self.direction,
+                                              'CURRENT')
+        Maps.TRIGGER_RECT_DRAW = True
+        Clock.schedule_once(lambda dt: self.osm_wrapper.draw_geoBounds())
 
         # convert each of the 2 points to (x,y).
         pt1_xtile, pt1_ytile = self.longlat2tile(LAT_MIN, LON_MIN, self.zoom)
@@ -2316,6 +2333,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
                                                   self.direction,
                                                   'CURRENT')
             Maps.TRIGGER_RECT_DRAW = True
+            Clock.schedule_once(lambda dt: self.osm_wrapper.draw_geoBounds())
 
             # convert each of the 2 points to (x,y).
             pt1_xtile, pt1_ytile = self.longlat2tile(LAT_MIN, LON_MIN,
@@ -2441,6 +2459,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
                                                           polygon_lookup_string,
                                                           'CURRENT' + str(i))
                     Maps.TRIGGER_RECT_DRAW = True
+                    Clock.schedule_once(lambda dt: self.osm_wrapper.draw_geoBounds())
                     # convert each of the 2 points to (x,y).
                     pt1_xtile, pt1_ytile = self.longlat2tile(LAT_MIN, LON_MIN,
                                                              self.zoom)
@@ -3601,7 +3620,10 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             return "ERROR: ROAD LOOKUP FAILED"
 
         if location:
-            loc = location['address']['road'].split(",")
+            try:
+                loc = location['address']['road'].split(",")
+            except KeyError:
+                return None
             if loc:
                 # If the first entry is a house number, return the second
                 if loc[0].isnumeric() or loc[0][0].isdigit():
