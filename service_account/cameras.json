@@ -1,0 +1,13 @@
+{
+    "cameras": [
+        {
+            "name": "AI Camera",
+            "coordinates": [
+                {
+                    "latitude": 40.52343889400008,
+                    "longitude": -4.071440871000005
+                }
+            ]
+        }
+    ]
+}
