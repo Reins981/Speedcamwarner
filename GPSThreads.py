@@ -244,7 +244,7 @@ class GPSThread(StoppableThread, Logger):
         self.gps_test_data = True
         self.max_gps_entries = 50000
         self.gpx_file = os.path.join(os.path.dirname(__file__), "gpx",
-                                     "cycle-cycleways.gpx")
+                                     "Weekend_Karntner_5SeenTour.gpx")
         # GPS treshold which is considered as a Weak GPS Signal
         self.gps_treshold = 40
         # Max GPS inaccuracy treshold after which the App will go into OFF mode.
@@ -266,7 +266,7 @@ class GPSThread(StoppableThread, Logger):
     def load_route_data(self):
         self.gps_test_data = True
         self.recording = False
-        self.gpx_file = os.path.join(os.path.dirname(__file__), "gpx", "route_data.gpx")
+        self.gpx_file = os.path.join(os.path.dirname(__file__), "gpx", "Weekend_Karntner_5SeenTour.gpx")
         if not os.path.exists(self.gpx_file):
             self.print_log_line("Route data file <route_data.gpx> not found!!!")
             self.gps_test_data = False

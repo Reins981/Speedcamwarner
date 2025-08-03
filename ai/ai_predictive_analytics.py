@@ -2,9 +2,9 @@ import json
 import random
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestRegressor  # Replace RandomForestClassifier with RandomForestRegressor
-from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split, KFold
+import lightgbm as lgb
+import optuna
 import joblib  # Add this import at the top
 
 
@@ -37,7 +37,7 @@ def simulate_driving_data(camera_data, num_samples=1000):
 def train_model(data):
     X = data[['latitude', 'longitude', 'time_of_day', 'day_of_week']]
     y = data[['camera_latitude', 'camera_longitude']]
-    
+
     # Define all possible categories for 'time_of_day' and 'day_of_week'
     all_time_of_day = ['morning', 'afternoon', 'evening', 'night']
     all_day_of_week = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -57,19 +57,76 @@ def train_model(data):
             X[col] = 0
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    model = RandomForestRegressor()  # Use RandomForestRegressor for regression
-    model.fit(X_train, y_train)
-    y_pred = model.predict(X_test)
 
-    # Calculate prediction error
-    error = np.sqrt(((y_test - y_pred) ** 2).mean(axis=0))
-    print(f"Prediction Error (Latitude, Longitude): {error}")
+    def train_single_target(X_train, y_train, X_val, y_val, param):
+        train_data = lgb.Dataset(X_train, label=y_train)
+        valid_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
 
-    # Save the trained model to a file
-    joblib.dump(model, 'speed_camera_model.pkl')
-    print("Model saved as 'speed_camera_model.pkl'")
+        model = lgb.train(param, train_data, valid_sets=[valid_data], callbacks=[lgb.log_evaluation(0), lgb.early_stopping(50)])
+        return model
 
-    return model
+    def objective(trial):
+        param = {
+            'objective': 'regression',
+            'metric': 'rmse',
+            'boosting_type': 'gbdt',
+            'learning_rate': trial.suggest_loguniform('learning_rate', 0.01, 0.1),
+            'num_leaves': trial.suggest_int('num_leaves', 20, 300),
+            'max_depth': trial.suggest_int('max_depth', 5, 50),
+            'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 10, 100),
+            'feature_fraction': trial.suggest_uniform('feature_fraction', 0.5, 1.0),
+        }
+
+        kf = KFold(n_splits=3, shuffle=True, random_state=42)
+        rmse_list = []
+
+        for train_idx, valid_idx in kf.split(X_train):
+            X_tr, X_val = X_train.iloc[train_idx], X_train.iloc[valid_idx]
+            y_tr_lat, y_val_lat = y_train.iloc[train_idx, 0], y_train.iloc[valid_idx, 0]
+            y_tr_lon, y_val_lon = y_train.iloc[train_idx, 1], y_train.iloc[valid_idx, 1]
+
+            model_lat = train_single_target(X_tr, y_tr_lat, X_val, y_val_lat, param)
+            model_lon = train_single_target(X_tr, y_tr_lon, X_val, y_val_lon, param)
+
+            y_pred_lat = model_lat.predict(X_val)
+            y_pred_lon = model_lon.predict(X_val)
+
+            rmse_lat = np.sqrt(((y_val_lat - y_pred_lat) ** 2).mean())
+            rmse_lon = np.sqrt(((y_val_lon - y_pred_lon) ** 2).mean())
+
+            rmse_list.append((rmse_lat + rmse_lon) / 2)
+
+        return np.mean(rmse_list)
+
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=50)
+
+    best_params = study.best_params
+    print(f"Best Parameters: {best_params}")
+
+    # Train final models for latitude and longitude separately
+    final_model_lat = lgb.LGBMRegressor(**best_params)
+    final_model_lat.fit(X_train, y_train.iloc[:, 0])
+
+    final_model_lon = lgb.LGBMRegressor(**best_params)
+    final_model_lon.fit(X_train, y_train.iloc[:, 1])
+
+    # Evaluate the models on the test set
+    y_pred_lat = final_model_lat.predict(X_test)
+    y_pred_lon = final_model_lon.predict(X_test)
+
+    error_lat = np.sqrt(((y_test.iloc[:, 0] - y_pred_lat) ** 2).mean())
+    error_lon = np.sqrt(((y_test.iloc[:, 1] - y_pred_lon) ** 2).mean())
+
+    print(f"Prediction Error (Latitude): {error_lat}")
+    print(f"Prediction Error (Longitude): {error_lon}")
+
+    # Save the trained models to files
+    joblib.dump(final_model_lat, 'speed_camera_model_lat.pkl')
+    joblib.dump(final_model_lon, 'speed_camera_model_lon.pkl')
+    print("Models saved as 'speed_camera_model_lat.pkl' and 'speed_camera_model_lon.pkl'")
+
+    return final_model_lat, final_model_lon
 
 
 def predict_speed_camera(model, latitude, longitude, time_of_day, day_of_week):
