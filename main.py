@@ -1953,9 +1953,13 @@ class MainView(FloatLayout):
         self.img_speedcam_mobil = Label(text="Mobile Cameras", pos=(0, 1350),
                                         size_hint=(.4, .10), font_size=50)
         self.list_view_modal16 = ListViewModal(pos=(0, 1650), size_hint=(1, .10))
-        self.poi_number = Label(text='0', pos=(0, 1653), size_hint=(1.8, .10),
+        self.speedcam_predictive_number = Label(text='0', pos=(0, 1653), size_hint=(1.8, .10),
+                                                font_size=50, bold=True)
+        self.img_speedcam_predictive = Label(text="Predictive Cameras", pos=(0, 1650),
+                                             size_hint=(.4, .10), font_size=50)
+        self.poi_number = Label(text='0', pos=(0, 1953), size_hint=(1.8, .10),
                                 font_size=50, bold=True)
-        self.img_poi = UIXImage(source='images/poi.png', pos=(0, 1650),
+        self.img_poi = UIXImage(source='images/poi.png', pos=(0, 1950),
                                 size_hint=(.4, .10))
         self.returnbutton_main = Button(pos=(0, 0), size_hint=(1, .20), text='<<<', font_size=500,
                                         bold=True, background_color=(.5, .5, .5, .5))
@@ -1978,6 +1982,8 @@ class MainView(FloatLayout):
         self.add_widget(self.img_speedcam_mobil)
         self.add_widget(self.speedcam_mobil_number)
         self.add_widget(self.list_view_modal16)
+        self.add_widget(self.img_speedcam_predictive)
+        self.add_widget(self.speedcam_predictive_number)
         self.add_widget(self.img_poi)
         self.add_widget(self.poi_number)
         self.add_widget(self.returnbutton_main)
@@ -1990,7 +1996,7 @@ class MainView(FloatLayout):
         self.rect.pos = instance.pos
 
     # provide None in case any of the speed cams should not get updated
-    def update_speed_cams(self, fix_cams, mobile_cams, traffic_cams, distance_cams):
+    def update_speed_cams(self, fix_cams, mobile_cams, traffic_cams, distance_cams, predictive_cams=None):
 
         if mobile_cams is not None:
             self.speedcam_mobil_number.text = str(mobile_cams)
@@ -2004,6 +2010,9 @@ class MainView(FloatLayout):
         if distance_cams is not None:
             self.speedcam_distance_number.text = str(distance_cams)
             Clock.schedule_once(self.speedcam_distance_number.texture_update)
+        if predictive_cams is not None:
+            self.speedcam_predictive_number.text = str(predictive_cams)
+            Clock.schedule_once(self.speedcam_predictive_number.texture_update)
 
     def update_pois(self, number):
         self.poi_number.text = str(number)
@@ -2652,6 +2661,7 @@ class MainTApp(App):
         else:
             if platform == "android":
                 gps.stop()
+            self.calculator.predictive_cam_list.clear()
             RectangleCalculatorThread.thread_lock = False
             self.stopped = True
             self.started = False

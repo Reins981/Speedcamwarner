@@ -9,10 +9,13 @@ Created on 01.07.2014
 
 from __future__ import division
 
+import os
 import ssl
 import time, calendar
+from datetime import datetime
 
 import certifi
+import joblib
 import requests
 
 from Logger import Logger
@@ -36,6 +39,7 @@ from enum import Enum
 from collections import defaultdict
 from ServiceAccount import upload_file_to_google_drive, \
     build_drive_from_credentials, add_camera_to_json, FILE_ID, FOLDER_ID
+from ai.ai_predictive_analytics import predict_speed_camera  # Import the predictive function
 
 ctx = ssl.create_default_context(cafile=certifi.where())
 geopy.geocoders.options.default_ssl_context = ctx
@@ -492,6 +496,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
         self.speed_cam_dict = []
         self.construction_areas = []
         self.road_candidates = []
+        self.predictive_cam_list = []
 
         # default timeout
         self.url_timeout = 25
@@ -501,6 +506,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
         self.traffic_cams = 0
         self.distance_cams = 0
         self.mobile_cams = 0
+        self.predictive_cams = 0
         self.cspeed = 0
         self.cspeed_cached = 0
         self.cspeed_converted = 0
@@ -568,6 +574,10 @@ class RectangleCalculatorThread(StoppableThread, Logger):
         self.mpw = MostProbableWay(self)
         self.mpw.set_maximum_number_of_road_names(4)
         self.mpw.set_maximum_number_of_next_possible_mprs(4)
+
+        # Load the trained predictive model
+        model_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "ai", "speed_camera_model.pkl")
+        self.model = joblib.load(model_path)
 
     # create an object for the fallback location lookup
 
@@ -1689,7 +1699,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             return 0
 
     def upload_camera_to_drive(self, name, latitude, longitude):
-        success = add_camera_to_json(name, coordinates=(latitude, longitude))
+        success, status = add_camera_to_json(name, coordinates=(latitude, longitude))
         if success:
             res = upload_file_to_google_drive(FILE_ID, FOLDER_ID, build_drive_from_credentials())
             if res == 'success':
@@ -1697,7 +1707,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             else:
                 self.voice_prompt_queue.produce_info(self.cv_voice, "ADDING_POLICE_FAILED")
         else:
-            self.voice_prompt_queue.produce_info(self.cv_voice, "ADDING_POLICE_FAILED")
+            self.voice_prompt_queue.produce_info(self.cv_voice, status)
 
     def process_lookahead_items(self, application_start_time, previous_ccp=False):
         if previous_ccp:
@@ -1717,6 +1727,9 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             self.cache_tiles(xtile, ytile)
             ccp_lat = self.latitude
             ccp_lon = self.longitude
+
+        # Process predictive cameras
+        self.process_predictive_cameras(ccp_lon, ccp_lat)
 
         for rectangle, thread_pool_func, msg, trigger_func in zip(
                 (self.RECT_SPEED_CAM_LOOKAHAEAD, self.RECT_CONSTRUCTION_AREAS_LOOKAHAEAD),
@@ -1858,6 +1871,96 @@ class RectangleCalculatorThread(StoppableThread, Logger):
                 self.update_map_queue()
                 self.update_kivi_info_page(update_construction_areas=True, mode="INCREASE")
                 self.cleanup_map_content("construction_area")
+
+    def process_predictive_cameras(self, longitude, latitude):
+        """
+        Process predictive cameras using a predictive model.
+
+        :param longitude: Longitude of the current position.
+        """
+        # Call the predictive model
+        time_of_day = datetime.now().strftime("%H:%M")
+        day_of_week = datetime.now().strftime("%A")
+        is_speed_camera = predict_speed_camera(
+            self.model, latitude, longitude, time_of_day, day_of_week
+        )
+
+        if is_speed_camera:
+            self.print_log_line(f"Warning: Predictive speed camera {is_speed_camera} detected ahead!",
+                                log_level="WARNING", color="YELLOW")
+
+            if is_speed_camera in self.predictive_cam_list:
+                self.print_log_line(
+                    f"Predictive speed camera {is_speed_camera} already in list, skipping addition.",
+                    log_level="WARNING", color="YELLOW"
+                )
+                return
+
+            self.print_log_line(
+                f"Adding predictive speed camera {is_speed_camera} to the processed list.",
+                log_level="INFO", color="GREEN"
+            )
+
+            prefix = 'PREDICTIVE_'
+            camera_latitude = is_speed_camera[0]
+            camera_longitude = is_speed_camera[1]
+            camera_key = prefix + str(self.predictive_cams)
+            name = self.get_road_name_via_nominatim(camera_longitude, camera_latitude)
+            if name is None or name.startswith("ERROR:"):
+                name = "AI Camera"
+
+            speed_cam_dict = dict()
+            speed_cam_dict[camera_key] = [camera_latitude,
+                                          camera_longitude,
+                                          camera_latitude,
+                                          camera_longitude,
+                                          True,
+                                          None,
+                                          None,
+                                          name if name else "---"]
+
+            self.speed_cam_queue.produce(self.cv_speedcam,
+                                         {
+                                             'ccp': (longitude, latitude),
+                                             'fix_cam': (
+                                                 False,
+                                                 float(camera_longitude),
+                                                 float(camera_latitude),
+                                                 True),
+                                             'traffic_cam': (
+                                                 False,
+                                                 float(camera_longitude),
+                                                 float(camera_latitude),
+                                                 True),
+                                             'distance_cam': (
+                                                 False,
+                                                 float(camera_longitude),
+                                                 float(camera_latitude),
+                                                 True),
+                                             'mobile_cam': (True,
+                                                            float(camera_longitude),
+                                                            float(camera_latitude),
+                                                            True),
+                                             'ccp_node': ('IGNORE',
+                                                          'IGNORE'),
+                                             'list_tree': (None,
+                                                           None),
+                                             'name': name,
+                                             'predictive': True
+                                         }
+                                         )
+
+            self.speed_cam_dict.append(speed_cam_dict)
+            self.update_kivi_info_page(poi_cams_predictive=1)
+            speed_l = copy.deepcopy(self.speed_cam_dict)
+            self.update_speed_cams(speed_l)
+            self.update_map_queue()
+            self.cleanup_map_content()
+            self.upload_camera_to_drive(name, camera_latitude, camera_longitude)
+            self.predictive_cam_list.append(is_speed_camera)
+
+        else:
+            self.print_log_line("No predictive speed camera detected.")
 
     def process_speed_cam_lookup_ahead_results(self, data, lookup_type, ccp_lon, ccp_lat):
         """
@@ -2145,7 +2248,7 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             self.osm_error_reported = False
             self.print_log_line("Construction are lookup finished!! Found %d construction areas "
                                 "ahead (%d km)" % (
-                                len(data), self.construction_area_lookahead_distance))
+                                    len(data), self.construction_area_lookahead_distance))
             self.process_construction_areas_lookup_ahead_results(data,
                                                                  LON_MIN, LAT_MIN, LON_MAX,
                                                                  LAT_MAX)
@@ -4553,7 +4656,8 @@ class RectangleCalculatorThread(StoppableThread, Logger):
             return False, 'ERROR', None, internal_error, current_rect
 
         except URLError as e:
-            self.print_log_line(f' We failed to reach the server {self.baseurl}', log_level="ERROR")
+            self.print_log_line(f' We failed to reach the server {self.baseurl}',
+                                log_level="ERROR")
             self.print_log_line(str(e))
             self.internet_connection = False
             self.failed_rect = current_rect
@@ -4669,18 +4773,35 @@ class RectangleCalculatorThread(StoppableThread, Logger):
     def update_kivi_info_page(self,
                               poi_cams=None,
                               poi_cams_mobile=None,
+                              poi_cams_predictive=None,
                               update_construction_areas=False,
                               mode="INCREASE"):
+        """
+        Update the KIVI info page with the number of speed cameras and
+        construction areas. If poi_cams is an int, it will be added to the
+        fixed cameras count. If poi_cams_mobile is provided, it will be set
+        as the mobile cameras count. If poi_cams_predictive is provided,
+        it will increase the predictive cameras count by that value.
+
+        :param poi_cams: Number of fixed cameras to add
+        :param poi_cams_mobile: Set the number of mobile cameras
+        :param poi_cams_predictive: Increase the number of predictive cameras by this value
+        :param update_construction_areas: If True, update construction areas instead of speed cams
+        :param mode: Mode for updating construction areas only, default is "INCREASE",
+        possible values are "INCREASE" or "DECREASE"
+        """
         if poi_cams is not None and isinstance(poi_cams, int):
             self.fix_cams += poi_cams
         if poi_cams_mobile is not None:
             self.mobile_cams = poi_cams_mobile
+        if poi_cams_predictive is not None:
+            self.predictive_cams += poi_cams_predictive
 
         if update_construction_areas:
             self.ml.update_construction_areas(mode)
         else:
             self.ml.update_speed_cams(self.fix_cams, self.mobile_cams,
-                                      self.traffic_cams, self.distance_cams)
+                                      self.traffic_cams, self.distance_cams, self.predictive_cams)
 
     def update_kivi_maxspeed_onlinecheck(self, online_available=True,
                                          status='OK', internal_error='', alternative_image=None):

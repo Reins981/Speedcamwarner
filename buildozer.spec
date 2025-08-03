@@ -16,7 +16,7 @@ source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,js,css,wav,html,gpx,json,xml,java
 
 # (list) List of inclusions using pattern matching
-source.include_patterns = assets/*,images/*.png,sounds/*.wav,gpx/*.gpx,service_account/*.json,camera_icons/*.png,camerax_provider/*.py,camerax_provider/camerax_src/org/kivy/camerax/*.java,data_models/*.xml
+source.include_patterns = assets/*,images/*.png,sounds/*.wav,gpx/*.gpx,service_account/*.json,camera_icons/*.png,camerax_provider/*.py,camerax_provider/camerax_src/org/kivy/camerax/*.java,data_models/*.xml,*.py
 
 # (list) Source files to exclude (let empty to not exclude anything)
 #source.exclude_exts = spec
@@ -37,7 +37,7 @@ version = 30.2
 
 # (list) Application requirements
 # comma separated e.g. requirements = sqlite3,kivy
-requirements = python3==3.10.11,kivy==2.1.0rc3,opencv,camera4kivy,gestures4kivy,google-api-python-client,cachetools,certifi,uritemplate,google,google-api-core,google-auth,google-auth-httplib2,google-cloud-core,google-cloud-firestore,google-cloud-storage,google-crc32c,google-resumable-media,googleapis-common-protos,httplib2,pyparsing,pyasn1,pyasn1-modules,pycparser,six,rsa,oauth2client,oscpy,sqlite3,gpxpy,requests,chardet,geopy,plyer,pyjnius,ffpyplayer,android,openssl,futures3,mapview==1.0.6,urllib3,charset-normalizer,idna,numpy
+requirements = python3==3.10.11,kivy==2.1.0rc3,opencv,camera4kivy,gestures4kivy,google-api-python-client,cachetools,certifi,uritemplate,google,google-api-core,google-auth,google-auth-httplib2,google-cloud-core,google-cloud-firestore,google-cloud-storage,google-crc32c,google-resumable-media,googleapis-common-protos,httplib2,pyparsing,pyasn1,pyasn1-modules,pycparser,six,rsa,oauth2client,oscpy,sqlite3,gpxpy,requests,chardet,geopy,plyer,pyjnius,ffpyplayer,android,openssl,futures3,mapview==1.0.6,urllib3,charset-normalizer,idna,numpy,pyttsx3,jnius
 
 # (str) Custom source folders for requirements
 # Sets custom source for any requirements with recipes

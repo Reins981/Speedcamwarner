@@ -71,7 +71,7 @@ def add_camera_to_json(name: str, coordinates: Tuple[float, float]):
     if not check_rate_limit('master_user'):
         logger.print_log_line(f"Dismiss Camera upload: "
                               f"Rate limit exceeded for user: 'master_user'", log_level="WARNING")
-        return False
+        return False, "RATE_LIMIT_EXCEEDED"
 
     new_camera = \
         {
@@ -91,7 +91,7 @@ def add_camera_to_json(name: str, coordinates: Tuple[float, float]):
     except FileNotFoundError:
         logger.print_log_line(f"add_camera_to_json() failed: {FILENAME} not found!",
                               log_level="ERROR")
-        return False
+        return False, "CAM_FILE_NOT_FOUND"
 
         # Check for duplicate coordinates
     existing_cameras = content.get('cameras', [])
@@ -100,7 +100,7 @@ def add_camera_to_json(name: str, coordinates: Tuple[float, float]):
                 camera['coordinates'][0]['longitude'] == coordinates[1]:
             logger.print_log_line(f"Dismiss Camera upload: Duplicate coordinates detected: "
                                   f"{coordinates}", log_level="WARNING")
-            return False
+            return False, "DUPLICATE_COORDINATES"
 
     # Append the new camera to the JSON file
     content['cameras'].append(new_camera)
@@ -108,7 +108,7 @@ def add_camera_to_json(name: str, coordinates: Tuple[float, float]):
     with open(FILENAME, 'w') as fp:
         json.dump(content, fp, indent=4, sort_keys=False)
 
-    return True
+    return True, None
 
 
 def upload_file_to_google_drive(f_id: str, folder_id: str, drive: Any, file_name: str = None) -> str:
@@ -143,7 +143,10 @@ def download_file_from_google_drive(f_id: str, drive: Any) -> str:
         return error
 
     try:
-        file = drive.files().get(fileId=f_id).execute()
+        # Save the file to the service_account folder
+        file_metadata = drive.files().get(fileId=f_id, fields='name').execute()
+        file_name = file_metadata['name']
+        file_path = os.path.join(BASE_PATH, file_name)  # Ensure the file is saved in the service_account directory
     except (gaierror, ServerNotFoundError, HttpError) as error:
         return str(error)
 
@@ -167,16 +170,13 @@ def download_file_from_google_drive(f_id: str, drive: Any) -> str:
             return str(error)
 
     try:
-        save_response_content(file, file_content)
+        # Save the downloaded content to the specified file path
+        with open(file_path, 'wb') as f:
+            f.write(file_content.getbuffer())
     except Exception as error:
         return str(error)
+
     return 'success'
-
-
-def save_response_content(file_meta: Any, file_content: Union[io.BytesIO]):
-    # Write the downloaded content to a file
-    with open(file_meta['name'], 'wb') as f:
-        f.write(file_content.getbuffer())
 
 
 if __name__ == "__main__":

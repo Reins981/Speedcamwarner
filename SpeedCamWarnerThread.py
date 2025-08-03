@@ -56,6 +56,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
         self.dismiss_counter = 0
         # Pointer to current cam coordinates
         self.current_cam_pointer = None
+        self.max_storage_time_increased = False
 
         self.set_configs()
 
@@ -87,6 +88,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
         # The value increases by 600 units if the ccp is UNSTABLE assuming the driver makes a
         # UTURN and cameras behind are still relevant
         self.max_storage_time = 28800
+        self.max_storage_time_backup = self.max_storage_time
         # Traversed cameras will be checked every X seconds
         self.traversed_cameras_interval = 3
         # Max dismiss counter for cameras with angle mismatch after which the cam road name text
@@ -117,6 +119,8 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
         self.cv_speedcam.release()
 
         self.ccp_bearing = item.get('bearing', None)
+        stable_ccp = item.get('stable_ccp', True)
+        self.adapt_max_storage_time(stable_ccp)
 
         if item['ccp'][0] == 'EXIT' or item['ccp'][1] == 'EXIT':
             self.print_log_line(' Speedcamwarner thread got a termination item')
@@ -159,6 +163,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                 max_speed = item.get('maxspeed', None)
                 new = True
                 previous_life = 'was_none'
+                predictive = False
                 cam_direction = self.convert_cam_direction(item.get('direction', None))
                 self.start_times[self.cam_coordinates] = start_time
 
@@ -174,7 +179,8 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                                                         cam_direction,
                                                         max_speed,
                                                         new,
-                                                        previous_life]
+                                                        previous_life,
+                                                        predictive]
                 self.INSERTED_SPEEDCAMS.append((item['fix_cam'][1], item['fix_cam'][2]))
 
         if item['traffic_cam'][0]:
@@ -206,6 +212,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                 max_speed = item.get('maxspeed', None)
                 new = True
                 previous_life = 'was_none'
+                predictive = False
                 cam_direction = self.convert_cam_direction(item.get('direction', None))
                 self.start_times[self.cam_coordinates] = start_time
 
@@ -221,7 +228,8 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                                                         cam_direction,
                                                         max_speed,
                                                         new,
-                                                        previous_life]
+                                                        previous_life,
+                                                        predictive]
                 self.INSERTED_SPEEDCAMS.append((item['traffic_cam'][1], item['traffic_cam'][2]))
 
         if item['distance_cam'][0]:
@@ -253,6 +261,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                 max_speed = item.get('maxspeed', None)
                 new = True
                 previous_life = 'was_none'
+                predictive = False
                 cam_direction = self.convert_cam_direction(item.get('direction', None))
                 self.start_times[self.cam_coordinates] = start_time
 
@@ -268,7 +277,8 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                                                         cam_direction,
                                                         max_speed,
                                                         new,
-                                                        previous_life]
+                                                        previous_life,
+                                                        predictive]
                 self.INSERTED_SPEEDCAMS.append((item['distance_cam'][1], item['distance_cam'][2]))
 
         if item['mobile_cam'][0]:
@@ -298,6 +308,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                 start_time = time.time()
                 roadname = item.get('name', None)
                 max_speed = item.get('maxspeed', None)
+                predictive = item.get('predictive', False)
                 new = True
                 previous_life = 'was_none'
                 cam_direction = self.convert_cam_direction(item.get('direction', None))
@@ -315,7 +326,8 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                                                         cam_direction,
                                                         max_speed,
                                                         new,
-                                                        previous_life]
+                                                        previous_life,
+                                                        predictive]
                 self.INSERTED_SPEEDCAMS.append((item['mobile_cam'][1], item['mobile_cam'][2]))
 
         # cameras to be deleted
@@ -362,9 +374,11 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
         for cam, cam_attributes in self.ITEMQUEUE.copy().items():
             distance = cam_attributes[-1]
             self.print_log_line(" Initial Distance to speed cam (%f, %f, %s): "
-                                "%f meters , last distance: %s, storage_time: %f seconds"
+                                "%f meters , last distance: %s, storage_time: %f seconds, "
+                                "predictive: %s"
                                 % (cam[0], cam[1], cam_attributes[0],
-                                   distance, str(cam_attributes[5]), cam_attributes[6]))
+                                   distance, str(cam_attributes[5]), cam_attributes[6],
+                                   cam_attributes[13]))
 
             if distance < 0 or cam_attributes[1] is True:
                 cams_to_delete.append(cam)
@@ -397,9 +411,11 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
 
         # Sort cameras based on distance
         cam, cam_entry = self.sort_pois(cam_list)
+        angle_mismatch_voice = False
 
         # Reset the camera dismiss counter
         if cam != self.current_cam_pointer:
+            angle_mismatch_voice = True
             self.dismiss_counter = 0
 
         # Point to the current camera
@@ -444,7 +460,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
             return False
 
         if self.enable_inside_relevant_angle_feature:
-            success = self.match_camera_against_angle(cam, current_distance_to_cam, cam_road_name)
+            success = self.match_camera_against_angle(cam, current_distance_to_cam, cam_road_name, angle_mismatch_voice)
             if not success:
                 return False
 
@@ -456,9 +472,10 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                                                                self.latitude))
             self.print_log_line(" Followup Distance to current speed cam "
                                 "(%f, %f, %s): %f meters , "
-                                "last distance: %s, storage_time: %f seconds"
+                                "last distance: %s, storage_time: %f seconds, predictive: %s"
                                 % (cam[0], cam[1], cam_attributes[0],
-                                   distance, str(cam_attributes[5]), cam_attributes[6]))
+                                   distance, str(cam_attributes[5]), cam_attributes[6],
+                                   cam_attributes[13]))
             if process_next_cam:
                 self.print_log_line(" -> Future speed cam in queue is: "
                                     "coords: (%f, %f), road name: %s, distance: %s "
@@ -474,6 +491,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                                           cam_attributes[4],
                                           cam_attributes[5],
                                           cam_attributes[10],
+                                          cam_attributes[13],
                                           next_cam_road,
                                           next_cam_distance,
                                           next_cam_distance_as_int,
@@ -497,7 +515,16 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
 
         return True
 
-    def match_camera_against_angle(self, cam, current_distance_to_cam, cam_road_name):
+    def adapt_max_storage_time(self, stable_ccp):
+        if not stable_ccp and not self.max_storage_time_increased:
+            self.print_log_line(' CCP is not stable. Increasing max storage time by 600 seconds')
+            self.max_storage_time += 600
+            self.max_storage_time_increased = True
+        else:
+            self.max_storage_time = self.max_storage_time_backup
+            self.max_storage_time_increased = False
+
+    def match_camera_against_angle(self, cam, current_distance_to_cam, cam_road_name, angle_mismatch_voice=False):
         if not self.inside_relevant_angle(cam, current_distance_to_cam):
             SpeedCamWarnerThread.CAM_IN_PROGRESS = False
             self.trigger_free_flow()
@@ -511,7 +538,8 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
             self.print_log_line(" Leaving Speed Camera with coordinates: "
                                 "(%s %s), road name: %s because of Angle mismatch"
                                 % (cam[0], cam[1], cam_road_name), log_level="WARNING")
-            self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'ANGLE_MISMATCH')
+            if angle_mismatch_voice:
+                self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'ANGLE_MISMATCH')
             return False
 
         return True
@@ -566,7 +594,7 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
 
     def trigger_speed_cam_update(self, distance=0, cam_coordinates=(0, 0), speedcam='fix',
                                  ccp_node=(0, 0), linked_list=None, tree=None,
-                                 last_distance=-1, max_speed=None,
+                                 last_distance=-1, max_speed=None, predictive=False,
                                  next_cam_road="", next_cam_distance="",
                                  next_cam_distance_as_int=0, process_next_cam=False):
 
@@ -579,7 +607,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                     elif speedcam == 'traffic':
                         self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'TRAFFIC_NOW')
                     elif speedcam == 'mobile':
-                        self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_NOW')
+                        self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_NOW') \
+                        if predictive is False else \
+                            self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_PREDICTIVE_NOW')
                     else:
                         self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'DISTANCE_NOW')
                 else:
@@ -588,7 +618,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                     elif speedcam == 'traffic':
                         self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'TRAFFIC_100')
                     elif speedcam == 'mobile':
-                        self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_100')
+                        self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_100') \
+                            if predictive is False else \
+                            self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_PREDICTIVE_100')
                     else:
                         self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'DISTANCE_100')
 
@@ -638,7 +670,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                 elif speedcam == 'traffic':
                     self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'TRAFFIC_300')
                 elif speedcam == 'mobile':
-                    self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_300')
+                    self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_300') \
+                        if predictive is False else \
+                        self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_PREDICTIVE_300')
                 else:
                     self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'DISTANCE_300')
 
@@ -700,7 +734,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                 elif speedcam == 'traffic':
                     self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'TRAFFIC_500')
                 elif speedcam == 'mobile':
-                    self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_500')
+                    self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_500') \
+                        if predictive is False else \
+                        self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_PREDICTIVE_500')
                 else:
                     self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'DISTANCE_500')
 
@@ -761,7 +797,9 @@ class SpeedCamWarnerThread(StoppableThread, Logger):
                 elif speedcam == 'traffic':
                     self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'TRAFFIC_1000')
                 elif speedcam == 'mobile':
-                    self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_1000')
+                    self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_1000') \
+                        if predictive is False else \
+                        self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'MOBILE_PREDICTIVE_1000')
                 else:
                     self.voice_prompt_queue.produce_camera_status(self.cv_voice, 'DISTANCE_1000')
 

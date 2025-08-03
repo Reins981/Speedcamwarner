@@ -10,7 +10,6 @@ Created on 01.07.2014
 import datetime
 import time
 import os
-
 import gpxpy
 from kivy.clock import Clock
 from ThreadBase import StoppableThread
@@ -91,56 +90,63 @@ class GPSConsumerThread(StoppableThread, Logger):
         Clock.schedule_once(self.curspeed.texture_update)
 
     def process(self):
+        """
+        Process GPS data and predict speed cameras
+        """
+        try:
+            gps_data = self.gpsqueue.consume(self.cv)
+            self.cv.release()
 
-        item = self.gpsqueue.consume(self.cv)
-        for key, value in item.items():
-            if value == 3:
-                if key == '---.-':
-                    self.clear_all(key)
-                elif key == "...":
-                    self.in_progress(key)
-                else:
-                    int_key = int(round(float(key)))
-                    float_key = float(key)
-                    # Update the current speed
-                    self.speed_update_kivy(float_key)
-
-                    if self.startup:
-                        self.speedlayout.update_accel_layout(int_key, True, 'ONLINE')
-                        self.backup_speed = int_key
-
-                        if float_key == 0.0:
-                            self.curvelayout.check_speed_deviation(float(0.1), True)
-
-                        else:
-                            self.curvelayout.check_speed_deviation(float_key, True)
-                        self.startup = False
+            # Existing logic continues here
+            for key, value in gps_data.items():
+                if value == 3:
+                    if key == '---.-':
+                        self.clear_all(key)
+                    elif key == "...":
+                        self.in_progress(key)
                     else:
-                        if int_key > self.backup_speed:
-                            self.speedlayout.update_accel_layout(int_key, True, 'ONLINE')
-                        elif int(round(float(key))) < self.backup_speed:
-                            self.speedlayout.update_accel_layout(int_key, False, 'ONLINE')
-                        else:
-                            # nothing to do
-                            pass
+                        int_key = int(round(float(key)))
+                        float_key = float(key)
+                        # Update the current speed
+                        self.speed_update_kivy(float_key)
 
-                        if float_key == 0.0:
-                            self.curvelayout.check_speed_deviation(float(0.1), False)
+                        if self.startup:
+                            self.speedlayout.update_accel_layout(int_key, True, 'ONLINE')
+                            self.backup_speed = int_key
+
+                            if float_key == 0.0:
+                                self.curvelayout.check_speed_deviation(float(0.1), True)
+
+                            else:
+                                self.curvelayout.check_speed_deviation(float_key, True)
+                            self.startup = False
                         else:
-                            self.curvelayout.check_speed_deviation(float_key, False)
-                        self.backup_speed = float_key
-            elif value == 4:
-                font_size = 100
-                self.bearing.text = key
-                self.bearing.font_size = font_size
-                Clock.schedule_once(self.bearing.texture_update)
-            elif value == 5:
-                self.speedlayout.update_gps_accuracy(key)
-            elif value == 1:
-                self.print_log_line("Exit item received")
-            else:
-                self.print_log_line(f"Invalid value {value} received!")
-        self.cv.release()
+                            if int_key > self.backup_speed:
+                                self.speedlayout.update_accel_layout(int_key, True, 'ONLINE')
+                            elif int(round(float(key))) < self.backup_speed:
+                                self.speedlayout.update_accel_layout(int_key, False, 'ONLINE')
+                            else:
+                                # nothing to do
+                                pass
+
+                            if float_key == 0.0:
+                                self.curvelayout.check_speed_deviation(float(0.1), False)
+                            else:
+                                self.curvelayout.check_speed_deviation(float_key, False)
+                            self.backup_speed = float_key
+                elif value == 4:
+                    font_size = 100
+                    self.bearing.text = key
+                    self.bearing.font_size = font_size
+                    Clock.schedule_once(self.bearing.texture_update)
+                elif value == 5:
+                    self.speedlayout.update_gps_accuracy(key)
+                elif value == 1:
+                    self.print_log_line("Exit item received")
+                else:
+                    self.print_log_line(f"Invalid value {value} received!")
+        except Exception as e:
+            self.print_log_line(f"Error processing GPS data: {e}")
 
     def update_current_speed_ui(self, key):
         if self.curspeed.text != key:
